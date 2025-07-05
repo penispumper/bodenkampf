@@ -77,7 +77,7 @@ bg_image3 = load_image_safe('./sprites/map/mountain.png', (WIDTH, HEIGHT)) # Opt
 
 # --- Animation frame loaders ---
 def load_animation_frames(folder, prefix, num_frames):
-    """Load frames like folder/prefix1.png ... folder/prefix6.png"""
+    """Load frames like folder/prefix1.png ... folder/prefixN.png"""
     frames = []
     for i in range(1, num_frames + 1):
         fname = os.path.join(folder, f"{prefix}{i}.png")
@@ -88,37 +88,27 @@ def load_animation_frames(folder, prefix, num_frames):
         frames.append(img)
     return frames
 
-# Walk and Jump Animation (6 frames each)
+# Walk, Jump, Crouch Animation (6/6/1 frames each)
 walk_frames_r = load_animation_frames("sprites/player/walk", "walk", 6)
 walk_frames_l = [pygame.transform.flip(f, True, False) for f in walk_frames_r]
 jump_frames_r = load_animation_frames("sprites/player/jump", "jump", 6)
 jump_frames_l = [pygame.transform.flip(f, True, False) for f in jump_frames_r]
+crouch_frames_r =  load_animation_frames("sprites/player/crouch", "crouch", 1)
+crouch_frames_l = [pygame.transform.flip(f, True, False) for f in crouch_frames_r]
 
-# Fallback for crouch: use your original loader, or update to folder method as above
-def load_strip(filename, cols, rows, frame_width, frame_height):
-    sheet = pygame.image.load(filename).convert_alpha()
+# --- Fight Animation Frames ---
+def load_fight_frames(folder, prefix, num_frames):
     frames = []
-    for row in range(rows):
-        for col in range(cols):
-            rect = pygame.Rect(col * frame_width, row * frame_height, frame_width, frame_height)
-            image = sheet.subsurface(rect)
-            frames.append(image)
+    for i in range(1, num_frames + 1):
+        fname = os.path.join(folder, f"{prefix}{i}.png")
+        if not os.path.exists(fname):
+            raise Exception(f"Missing fight file: {fname}")
+        img = pygame.image.load(fname).convert_alpha()
+        img = pygame.transform.scale(img, (PLAYER_WIDTH*2, PLAYER_HEIGHT*2))
+        frames.append(img)
     return frames
 
-def load_frames(prefix):
-    path = os.path.join("sprites", f"player/{prefix}.png")
-    original_frames = load_strip(path, cols=3, rows=2, frame_width=166, frame_height=250)
-    scale_factor = 1
-    scaled_width = int(64 * scale_factor)
-    scaled_height = int(64 * scale_factor)
-    transformed_frames = []
-    for frame in original_frames:
-        transformed_frame = pygame.transform.scale(frame, (scaled_width, scaled_height))
-        transformed_frames.append(transformed_frame)
-    return transformed_frames
-
-crouch_frames_r = load_frames("crouch")
-crouch_frames_l = [pygame.transform.flip(f, True, False) for f in crouch_frames_r]
+fight_frames = load_fight_frames("sprites/fight", "fight", 3)
 
 # --- Classes for modular levels ---
 class Level:
@@ -175,7 +165,7 @@ def create_obstacles_lvl3():
     obs = []
     obs.append({'rect': pygame.Rect(100, GROUND_Y-10, 100, 10), 'type': 'spike'})
     obs.append({'rect': pygame.Rect(300, GROUND_Y-120, 80, 20),'type': 'platform'})
-    obs.append({'rect': pygame.Rect(350, GROUND_Y-30, 40, 20),  'type': 'spring'})  # Trampoline
+    obs.append({'rect': pygame.Rect(350, GROUND_Y-30, 40, 20),  'type': 'spring'})
     obs.append({'rect': pygame.Rect(600, GROUND_Y-5, 200, 10), 'type': 'water'})
     return obs
 
@@ -262,6 +252,11 @@ bg_offset = 0  # For apartment parallax
 jump_anim_progress = 0
 jump_anim_playing = False
 
+# --- Fight Animation State ---
+fight_anim_active = False
+fight_anim_start = 0
+fight_anim_frame = 0
+
 running = True
 
 while running:
@@ -275,6 +270,9 @@ while running:
         if in_battle and e.type == pygame.KEYDOWN:
             if e.key == pygame.K_f:
                 enemy_alive = False; in_battle = False
+                fight_anim_active = True
+                fight_anim_start = pygame.time.get_ticks()
+                fight_anim_frame = 0
             if e.key == pygame.K_r:
                 player.x = -PLAYER_WIDTH; in_battle = False
         if not in_battle and e.type == pygame.KEYDOWN:
@@ -284,7 +282,7 @@ while running:
     keys = pygame.key.get_pressed()
     old_x, old_y = player.x, player.y
 
-    if not in_battle:
+    if not in_battle and not fight_anim_active:
         # Movement
         if keys[pygame.K_LEFT]:
             player.x = max(-PLAYER_WIDTH, player.x - PLAYER_SPEED)
@@ -336,7 +334,7 @@ while running:
     cam_x = max(0, min(player.x + PLAYER_WIDTH//2 - WIDTH//2, LEVEL_WIDTH - WIDTH))
 
     # Levelwechsel
-    if not enemy_alive and player.x >= LEVEL_WIDTH:
+    if not enemy_alive and player.x >= LEVEL_WIDTH and not fight_anim_active:
         current_level_idx += 1
         if current_level_idx >= NUM_LEVELS:
             break
@@ -349,7 +347,6 @@ while running:
         player_vel_y = 0
         big_clouds, small_clouds = clone_clouds(level.clouds) if level.clouds else ([], [])
         bg_offset = 0
-        # Transition
         screen.fill(BG_COLOR)
         txt = font.render(f"Level {current_level_idx+1}", True, TEXT_COLOR)
         screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - txt.get_height()//2))
@@ -398,7 +395,6 @@ while running:
         r = o['rect']
         typ = o['type']
         img = OBSTACLE_IMAGES.get(typ)
-        # Level-specific color overrides (e.g., trampoline/spring color)
         if typ == 'spring':
             if current_level_idx == 2:
                 color = (200, 120, 255)
@@ -414,75 +410,78 @@ while running:
         else:
             pygame.draw.rect(screen, color, (r.x - cam_x, r.y, r.width, r.height))
 
-    # Gegner/Boss
-    if enemy_alive and enemy:
-        ex, ey = enemy.x - cam_x, enemy.y
-        if current_level_idx == 2:
-            pygame.draw.rect(screen, (40,220,40), (ex, ey, enemy.width, enemy.height))
-        elif enemy_image:
-            screen.blit(enemy_image, (ex, ey))
-        else:
-            pygame.draw.rect(screen, (50,200,50), (ex, ey, ENEMY_WIDTH, ENEMY_HEIGHT))
-
-    # --- Player Animation ---
-    # --- Animation State Selection ---
-    if player_vel_y != 0:
-        state = "jump"
-        if not jump_anim_playing:
-            jump_anim_playing = True
-            jump_anim_progress = 0
-    elif keys[pygame.K_DOWN]:
-        state = "crouch"
-    elif keys[pygame.K_LEFT] or keys[pygame.K_RIGHT]:
-        state = "walk"
+    # --- Fight Animation ---
+    if fight_anim_active:
+        fight_duration = 2000  # ms
+        elapsed = pygame.time.get_ticks() - fight_anim_start
+        frame_time = fight_duration // len(fight_frames)
+        fight_anim_frame = min(elapsed // frame_time, len(fight_frames) - 1)
+        fight_img = fight_frames[fight_anim_frame]
+        fight_x = WIDTH//2 - fight_img.get_width()//2
+        fight_y = HEIGHT//2 - fight_img.get_height()//2
+        screen.blit(fight_img, (fight_x, fight_y))
+        if elapsed >= fight_duration:
+            fight_anim_active = False
+        # Skip all other character drawing during fight
     else:
-        state = "idle"
-    if player_vel_y == 0:
-        jump_anim_playing = False
-        jump_anim_playing = False
-
-    facing = "l" if keys[pygame.K_LEFT] else "r"
-
-    # --- Animation Frame Selection ---
-    if state == "walk":
-        frames = walk_frames_l if facing=="l" else walk_frames_r
-        n_frames = len(frames)
-        if anim_state != state:
-            anim_state = state
-            anim_frame = 0
-            anim_timer = now
-        elif now - anim_timer > 100:
-            anim_timer = now
-            anim_frame = (anim_frame + 1) % n_frames
-        current_image = frames[anim_frame]
-
-    elif state == "jump":
-        frames = jump_frames_l if facing=="l" else jump_frames_r
-        n_frames = len(frames)
-        # Advance ONCE from 0 to 5 during jump
-        if jump_anim_playing:
-            if now - anim_timer > 60 and jump_anim_progress < n_frames - 1:
-                anim_timer = now
-                jump_anim_progress += 1
-            current_image = frames[jump_anim_progress]
+        # Gegner/Boss
+        if enemy_alive and enemy:
+            ex, ey = enemy.x - cam_x, enemy.y
+            if current_level_idx == 2:
+                pygame.draw.rect(screen, (40,220,40), (ex, ey, enemy.width, enemy.height))
+            elif enemy_image:
+                screen.blit(enemy_image, (ex, ey))
+            else:
+                pygame.draw.rect(screen, (50,200,50), (ex, ey, ENEMY_WIDTH, ENEMY_HEIGHT))
+        # --- Player Animation ---
+        if player_vel_y != 0:
+            state = "jump"
+            if not jump_anim_playing:
+                jump_anim_playing = True
+                jump_anim_progress = 0
+        elif keys[pygame.K_DOWN]:
+            state = "crouch"
+        elif keys[pygame.K_LEFT] or keys[pygame.K_RIGHT]:
+            state = "walk"
         else:
-            current_image = frames[-1]  # Hold last frame if still airborne
+            state = "idle"
+        if player_vel_y == 0:
+            jump_anim_playing = False
 
-    elif state == "crouch":
-        frames = crouch_frames_l if facing=="l" else crouch_frames_r
-        current_image = frames[0]
-        new_h = int(PLAYER_HEIGHT * CROUCH_FACTOR)
-        current_image = pygame.transform.scale(current_image, (PLAYER_WIDTH, new_h))
-        py = GROUND_Y - new_h
-
-    else:  # idle
-        frames = [walk_frames_l[0]] if facing=="l" else [walk_frames_r[0]]
-        current_image = frames[0]
-
-    # --- Drawing Player ---
-    if state != "crouch":
-        py = player.y
-    screen.blit(current_image, (player.x - cam_x, py))
+        facing = "l" if keys[pygame.K_LEFT] else "r"
+        if state == "walk":
+            frames = walk_frames_l if facing=="l" else walk_frames_r
+            n_frames = len(frames)
+            if anim_state != state:
+                anim_state = state
+                anim_frame = 0
+                anim_timer = now
+            elif now - anim_timer > 100:
+                anim_timer = now
+                anim_frame = (anim_frame + 1) % n_frames
+            current_image = frames[anim_frame]
+        elif state == "jump":
+            frames = jump_frames_l if facing=="l" else jump_frames_r
+            n_frames = len(frames)
+            if jump_anim_playing:
+                if now - anim_timer > 60 and jump_anim_progress < n_frames - 1:
+                    anim_timer = now
+                    jump_anim_progress += 1
+                current_image = frames[jump_anim_progress]
+            else:
+                current_image = frames[-1]
+        elif state == "crouch":
+            frames = crouch_frames_l if facing=="l" else crouch_frames_r
+            current_image = frames[0]
+            new_h = int(PLAYER_HEIGHT * CROUCH_FACTOR)
+            current_image = pygame.transform.scale(current_image, (PLAYER_WIDTH, new_h))
+            py = GROUND_Y - new_h
+        else:  # idle
+            frames = [walk_frames_l[0]] if facing=="l" else [walk_frames_r[0]]
+            current_image = frames[0]
+        if state != "crouch":
+            py = player.y
+        screen.blit(current_image, (player.x - cam_x, py))
 
     # --- UI ---
     info = font.render(
@@ -493,7 +492,7 @@ while running:
     fps = font.render(f"FPS: {int(clock.get_fps())}", True, TEXT_COLOR)
     screen.blit(fps, (WIDTH-100, 10))
 
-    if in_battle:
+    if in_battle and not fight_anim_active:
         l1 = font.render(f"Level {current_level_idx+1}: Gegner blockiert!", True, TEXT_COLOR)
         l2 = font.render("[F] kämpfen  [R] fliehen", True, TEXT_COLOR)
         screen.blit(l1, (50, 150))
