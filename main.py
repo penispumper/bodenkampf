@@ -91,7 +91,7 @@ def load_animation_frames(folder, prefix, num_frames):
 # Walk and Jump Animation (6 frames each)
 walk_frames_r = load_animation_frames("sprites/player/walk", "walk", 6)
 walk_frames_l = [pygame.transform.flip(f, True, False) for f in walk_frames_r]
-jump_frames_r = load_animation_frames("sprites/player/jump", "Jump", 6)
+jump_frames_r = load_animation_frames("sprites/player/jump", "jump", 6)
 jump_frames_l = [pygame.transform.flip(f, True, False) for f in jump_frames_r]
 
 # Fallback for crouch: use your original loader, or update to folder method as above
@@ -438,6 +438,7 @@ while running:
     else:
         state = "idle"
     if player_vel_y == 0:
+        jump_anim_playing = False
         jump_anim_playing = False
 
     facing = "l" if keys[pygame.K_LEFT] else "r"
