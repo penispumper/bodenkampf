@@ -98,8 +98,25 @@ def load_frames(prefix):
         transformed_frames.append(transformed_frame)
     return transformed_frames
 
-walk_frames_r   = load_frames("walk-removebg-preview")
-walk_frames_l   = [pygame.transform.flip(f, True, False) for f in walk_frames_r]
+# --- New helper for folder-based walk animation ---
+def load_walk_frames(folder):
+    """Loads all walkN.png in the given folder, returns them sorted by number."""
+    frames = []
+    for i in range(1, 100):
+        fname = os.path.join(folder, f"walk{i}.png")
+        if not os.path.exists(fname):
+            break
+        img = pygame.image.load(fname).convert_alpha()
+        img = pygame.transform.scale(img, (PLAYER_WIDTH, PLAYER_HEIGHT))
+        frames.append(img)
+    if not frames:
+        raise Exception(f"No walk frames found in {folder}")
+    return frames
+
+# --- Replace the walk_frames loader ---
+walk_frames_r = load_walk_frames("sprites/player/walk")
+walk_frames_l = [pygame.transform.flip(f, True, False) for f in walk_frames_r]
+
 jump_frames_r   = load_frames("jump")
 jump_frames_l   = [pygame.transform.flip(f, True, False) for f in jump_frames_r]
 crouch_frames_r = load_frames("crouch")
@@ -465,4 +482,3 @@ while running:
 
 pygame.quit()
 sys.exit()
-^
