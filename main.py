@@ -18,7 +18,7 @@ CROUCH_FACTOR = 0.5
 SCREENS_PER_LEVEL = 3
 LEVEL_WIDTH = WIDTH * SCREENS_PER_LEVEL
 
-ENEMY_WIDTH, ENEMY_HEIGHT = int(50 * 1.3), int(70 * 1.4)
+ENEMY_WIDTH, ENEMY_HEIGHT = int(66 * 1.3), int(90 * 1.4)
 
 BG_COLOR       = (50, 150, 200)
 GROUND_COLOR   = (100, 50, 0)
@@ -105,7 +105,7 @@ def load_fight_frames(folder, prefix, num_frames):
         if not os.path.exists(fname):
             raise Exception(f"Missing fight file: {fname}")
         img = pygame.image.load(fname).convert_alpha()
-        img = pygame.transform.scale(img, (PLAYER_WIDTH*2, PLAYER_HEIGHT*2))
+        img = pygame.transform.scale(img, (180, 140))
         frames.append(img)
     return frames
 
@@ -118,7 +118,6 @@ class Level:
         self.obstacle_factory = obstacle_factory
         self.boss_factory = boss_factory or (lambda: None)
         self.clouds = clouds
-
 
 def load_background_images(folder):
     images = []
@@ -146,7 +145,6 @@ bg_apartment_placements = [
 def bg_apartment(screen, cam_x, bg_offset=0):
     screen.fill((163, 111, 64))
     offset = int(bg_offset)
-
     for i, img in enumerate(bg_apartment_images):
         if i < len(bg_apartment_placements):
             x, y, w, h = bg_apartment_placements[i]
@@ -168,7 +166,6 @@ def bg_park(screen, cam_x):
 
 def load_obstacle_image(level, obstype):
     folder = f"sprites/obstacles/level{level}/{obstype}"
-    # Try common names first (you can extend this logic)
     for img_name in [f"{obstype}1.png", f"{obstype}.png", "1.png"]:
         img_path = os.path.join(folder, img_name)
         if os.path.exists(img_path):
@@ -183,15 +180,14 @@ def create_obstacles_lvl1():
     def add_obstacle(x, y, w, h, typ):
         img = load_obstacle_image(1, typ)
         obs.append({'rect': pygame.Rect(x, y, w, h), 'type': typ, 'img': img})
-
-    add_obstacle(150, GROUND_Y - 30, 50, 30, 'spike')
+    add_obstacle(150, GROUND_Y - 20, 100, 66, 'spikes')
     add_obstacle(350, GROUND_Y-20, 50, 50, 'spring')
-    add_obstacle(550, GROUND_Y-120, 80, 20, 'platform')
-    add_obstacle(480, GROUND_Y-5, 200, 10, 'water')
+    add_obstacle(480, GROUND_Y-20, 60, 60, 'water')
+    add_obstacle(530, GROUND_Y-25, 70, 70, 'water')
+    add_obstacle(580, GROUND_Y-15, 50, 50, 'water')
     off = WIDTH
-    add_obstacle(off+150, GROUND_Y-20, 40, 20, 'spring')
-    add_obstacle(off+200, GROUND_Y-10, 120, 10, 'spike')
-    add_obstacle(off+600, GROUND_Y-60, 60, 60, 'rotating')
+    add_obstacle(off+200, GROUND_Y-20, 100, 66, 'spikes')
+    add_obstacle(off+600, GROUND_Y-30, 90, 90, 'rotating')
     return obs
 
 def create_obstacles_lvl2():
@@ -455,21 +451,20 @@ while running:
             fight_anim_active = False
             fight_anim_done = True
         else:
-            # Position at center between player and enemy (relative to cam_x!)
+            # Center between player and enemy, both shifted 30px down
             px = player.x - cam_x + player.width // 2
             ex = enemy.x - cam_x + enemy.width // 2
-            py = player.y + player.height // 2
-            ey = enemy.y + enemy.height // 2
+            py = player.y + player.height // 2 + 10
+            ey = enemy.y + enemy.height // 2 + 10
             fight_x = (px + ex) // 2 - fight_frames[0].get_width() // 2
             fight_y = (py + ey) // 2 - fight_frames[0].get_height() // 2
-
             fight_img = fight_frames[frame_index % len(fight_frames)]
             screen.blit(fight_img, (fight_x, fight_y))
         # Skip all other drawing during fight
     else:
         # Gegner/Boss
         if enemy_alive and enemy:
-            ex, ey = enemy.x - cam_x, enemy.y
+            ex, ey = enemy.x - cam_x, enemy.y + 30
             if current_level_idx == 2:
                 pygame.draw.rect(screen, (40,220,40), (ex, ey, enemy.width, enemy.height))
             elif enemy_image:
@@ -518,12 +513,12 @@ while running:
             current_image = frames[0]
             new_h = int(PLAYER_HEIGHT * CROUCH_FACTOR)
             current_image = pygame.transform.scale(current_image, (PLAYER_WIDTH, new_h))
-            py = GROUND_Y - new_h
+            py = GROUND_Y - new_h + 30
         else:  # idle
             frames = [walk_frames_l[0]] if facing=="l" else [walk_frames_r[0]]
             current_image = frames[0]
         if state != "crouch":
-            py = player.y
+            py = player.y + 30
         screen.blit(current_image, (player.x - cam_x, py))
 
     # --- UI ---
