@@ -75,7 +75,26 @@ cloud_img_small = pygame.transform.scale(cloud_img_big, (60, 30)) if cloud_img_b
 bg_image2 = load_image_safe('./sprites/map/forest.png', (WIDTH, HEIGHT))  # Optional
 bg_image3 = load_image_safe('./sprites/map/mountain.png', (WIDTH, HEIGHT)) # Optional
 
-# --- Player animation ---
+# --- Animation frame loaders ---
+def load_animation_frames(folder, prefix, num_frames):
+    """Load frames like folder/prefix1.png ... folder/prefix6.png"""
+    frames = []
+    for i in range(1, num_frames + 1):
+        fname = os.path.join(folder, f"{prefix}{i}.png")
+        if not os.path.exists(fname):
+            raise Exception(f"Missing file: {fname}")
+        img = pygame.image.load(fname).convert_alpha()
+        img = pygame.transform.scale(img, (PLAYER_WIDTH, PLAYER_HEIGHT))
+        frames.append(img)
+    return frames
+
+# Walk and Jump Animation (6 frames each)
+walk_frames_r = load_animation_frames("sprites/player/walk", "walk", 6)
+walk_frames_l = [pygame.transform.flip(f, True, False) for f in walk_frames_r]
+jump_frames_r = load_animation_frames("sprites/player/jump", "Jump", 6)
+jump_frames_l = [pygame.transform.flip(f, True, False) for f in jump_frames_r]
+
+# Fallback for crouch: use your original loader, or update to folder method as above
 def load_strip(filename, cols, rows, frame_width, frame_height):
     sheet = pygame.image.load(filename).convert_alpha()
     frames = []
@@ -98,27 +117,6 @@ def load_frames(prefix):
         transformed_frames.append(transformed_frame)
     return transformed_frames
 
-# --- New helper for folder-based walk animation ---
-def load_walk_frames(folder):
-    """Loads all walkN.png in the given folder, returns them sorted by number."""
-    frames = []
-    for i in range(1, 100):
-        fname = os.path.join(folder, f"walk{i}.png")
-        if not os.path.exists(fname):
-            break
-        img = pygame.image.load(fname).convert_alpha()
-        img = pygame.transform.scale(img, (PLAYER_WIDTH, PLAYER_HEIGHT))
-        frames.append(img)
-    if not frames:
-        raise Exception(f"No walk frames found in {folder}")
-    return frames
-
-# --- Replace the walk_frames loader ---
-walk_frames_r = load_walk_frames("sprites/player/walk")
-walk_frames_l = [pygame.transform.flip(f, True, False) for f in walk_frames_r]
-
-jump_frames_r   = load_frames("jump")
-jump_frames_l   = [pygame.transform.flip(f, True, False) for f in jump_frames_r]
 crouch_frames_r = load_frames("crouch")
 crouch_frames_l = [pygame.transform.flip(f, True, False) for f in crouch_frames_r]
 
@@ -130,7 +128,6 @@ class Level:
         self.boss_factory = boss_factory or (lambda: None)
         self.clouds = clouds
 
-# --- Apartment background with parallax offset ---
 def bg_apartment(screen, cam_x, bg_offset=0):
     screen.fill((255, 255, 255))
     offset = int(bg_offset)
@@ -182,7 +179,6 @@ def create_obstacles_lvl3():
     obs.append({'rect': pygame.Rect(600, GROUND_Y-5, 200, 10), 'type': 'water'})
     return obs
 
-# --- Boss/Enemy logic per level ---
 def spawn_enemy():
     x = WIDTH*(SCREENS_PER_LEVEL-1) + WIDTH//2 - ENEMY_WIDTH//2
     y = GROUND_Y - ENEMY_HEIGHT
@@ -218,7 +214,6 @@ levels = [
 ]
 NUM_LEVELS = len(levels)
 
-# --- Game state ---
 def show_intro():
     intro = [
         "Es ist ein ganz normaler Morgen an der Universität.",
@@ -264,7 +259,11 @@ anim_timer = 0
 anim_frame = 0
 bg_offset = 0  # For apartment parallax
 
+jump_anim_progress = 0
+jump_anim_playing = False
+
 running = True
+
 while running:
     dt = clock.tick(FPS)
     now = pygame.time.get_ticks()
@@ -426,41 +425,62 @@ while running:
             pygame.draw.rect(screen, (50,200,50), (ex, ey, ENEMY_WIDTH, ENEMY_HEIGHT))
 
     # --- Player Animation ---
+    # --- Animation State Selection ---
     if player_vel_y != 0:
         state = "jump"
-    elif keys[pygame.K_DOWN] and player_vel_y == 0:
+        if not jump_anim_playing:
+            jump_anim_playing = True
+            jump_anim_progress = 0
+    elif keys[pygame.K_DOWN]:
         state = "crouch"
     elif keys[pygame.K_LEFT] or keys[pygame.K_RIGHT]:
         state = "walk"
     else:
         state = "idle"
+    if player_vel_y == 0:
+        jump_anim_playing = False
 
     facing = "l" if keys[pygame.K_LEFT] else "r"
+
+    # --- Animation Frame Selection ---
     if state == "walk":
         frames = walk_frames_l if facing=="l" else walk_frames_r
+        n_frames = len(frames)
+        if anim_state != state:
+            anim_state = state
+            anim_frame = 0
+            anim_timer = now
+        elif now - anim_timer > 100:
+            anim_timer = now
+            anim_frame = (anim_frame + 1) % n_frames
+        current_image = frames[anim_frame]
+
     elif state == "jump":
         frames = jump_frames_l if facing=="l" else jump_frames_r
+        n_frames = len(frames)
+        # Advance ONCE from 0 to 5 during jump
+        if jump_anim_playing:
+            if now - anim_timer > 60 and jump_anim_progress < n_frames - 1:
+                anim_timer = now
+                jump_anim_progress += 1
+            current_image = frames[jump_anim_progress]
+        else:
+            current_image = frames[-1]  # Hold last frame if still airborne
+
     elif state == "crouch":
         frames = crouch_frames_l if facing=="l" else crouch_frames_r
-    else:
-        frames = [walk_frames_l[0]] if facing=="l" else [walk_frames_r[0]]
-
-    if anim_state != state:
-        anim_state = state
-        anim_frame = 0
-        anim_timer = now
-    elif now - anim_timer > 100:
-        anim_timer = now
-        anim_frame = (anim_frame + 1) % len(frames)
-
-    current_image = frames[anim_frame]
-    if state == "crouch":
+        current_image = frames[0]
         new_h = int(PLAYER_HEIGHT * CROUCH_FACTOR)
         current_image = pygame.transform.scale(current_image, (PLAYER_WIDTH, new_h))
         py = GROUND_Y - new_h
-    else:
-        py = player.y
 
+    else:  # idle
+        frames = [walk_frames_l[0]] if facing=="l" else [walk_frames_r[0]]
+        current_image = frames[0]
+
+    # --- Drawing Player ---
+    if state != "crouch":
+        py = player.y
     screen.blit(current_image, (player.x - cam_x, py))
 
     # --- UI ---
