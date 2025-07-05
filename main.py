@@ -296,6 +296,10 @@ jump_anim_playing = False
 fight_anim_active = False
 fight_anim_start = 0
 fight_anim_frame = 0
+fight_anim_loops = 5  # Loop through frames 5 times
+fight_anim_total_frames = len(fight_frames) * fight_anim_loops
+fight_anim_duration = 2000  # ms
+fight_anim_done = False
 
 running = True
 
@@ -444,17 +448,24 @@ while running:
 
     # --- Fight Animation ---
     if fight_anim_active:
-        fight_duration = 2000  # ms
         elapsed = pygame.time.get_ticks() - fight_anim_start
-        frame_time = fight_duration // len(fight_frames)
-        fight_anim_frame = min(elapsed // frame_time, len(fight_frames) - 1)
-        fight_img = fight_frames[fight_anim_frame]
-        fight_x = WIDTH//2 - fight_img.get_width()//2
-        fight_y = HEIGHT//2 - fight_img.get_height()//2
-        screen.blit(fight_img, (fight_x, fight_y))
-        if elapsed >= fight_duration:
+        frame_duration = fight_anim_duration / fight_anim_total_frames
+        frame_index = int(elapsed // frame_duration)
+        if frame_index >= fight_anim_total_frames:
             fight_anim_active = False
-        # Skip all other character drawing during fight
+            fight_anim_done = True
+        else:
+            # Position at center between player and enemy (relative to cam_x!)
+            px = player.x - cam_x + player.width // 2
+            ex = enemy.x - cam_x + enemy.width // 2
+            py = player.y + player.height // 2
+            ey = enemy.y + enemy.height // 2
+            fight_x = (px + ex) // 2 - fight_frames[0].get_width() // 2
+            fight_y = (py + ey) // 2 - fight_frames[0].get_height() // 2
+
+            fight_img = fight_frames[frame_index % len(fight_frames)]
+            screen.blit(fight_img, (fight_x, fight_y))
+        # Skip all other drawing during fight
     else:
         # Gegner/Boss
         if enemy_alive and enemy:
