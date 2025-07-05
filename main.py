@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+import glob
 
 # --- Config ---
 WIDTH, HEIGHT = 800, 480
@@ -17,7 +18,7 @@ CROUCH_FACTOR = 0.5
 SCREENS_PER_LEVEL = 3
 LEVEL_WIDTH = WIDTH * SCREENS_PER_LEVEL
 
-ENEMY_WIDTH, ENEMY_HEIGHT = int(40 * 1.3), int(60 * 1.4)
+ENEMY_WIDTH, ENEMY_HEIGHT = int(50 * 1.3), int(70 * 1.4)
 
 BG_COLOR       = (50, 150, 200)
 GROUND_COLOR   = (100, 50, 0)
@@ -118,16 +119,39 @@ class Level:
         self.boss_factory = boss_factory or (lambda: None)
         self.clouds = clouds
 
+
+def load_background_images(folder):
+    images = []
+    paths = sorted(glob.glob(os.path.join(folder, "*.png")))
+    for path in paths:
+        try:
+            img = pygame.image.load(path).convert_alpha()
+            images.append(img)
+        except Exception as e:
+            print(f"Could not load {path}: {e}")
+    return images
+
+bg_apartment_images = load_background_images("sprites/background/level1")
+bg_apartment_placements = [
+    (80, 340, 80, 80),
+    (190, 300, 120, 120),
+    (350, 350, 40, 70),
+    (420, 250, 70, 70),
+    (550, 360, 60, 60),
+    (650, 350, 50, 70),
+    (800, 360, 60, 60)
+]
+
 def bg_apartment(screen, cam_x, bg_offset=0):
-    screen.fill((255, 255, 255))
+    screen.fill((163, 111, 64))
     offset = int(bg_offset)
-    pygame.draw.rect(screen, (220, 220, 220), (0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y))
-    pygame.draw.rect(screen, (200, 180, 130), (50 + offset, GROUND_Y - 40, 80, 40))
-    pygame.draw.rect(screen, (180, 220, 250), (50 + offset, GROUND_Y - 60, 80, 20))
-    pygame.draw.rect(screen, (140, 100, 70), (WIDTH - 130 + offset, GROUND_Y - 70, 80, 10))
-    pygame.draw.rect(screen, (100, 80, 50), (WIDTH - 110 + offset, GROUND_Y - 120, 40, 50))
-    pygame.draw.rect(screen, (255, 230, 200), (250 + offset, GROUND_Y - 110, 40, 30))
-    pygame.draw.line(screen, (0, 120, 200), (255 + offset, GROUND_Y - 105), (285 + offset, GROUND_Y - 85), 2)
+
+    for i, img in enumerate(bg_apartment_images):
+        if i < len(bg_apartment_placements):
+            x, y, w, h = bg_apartment_placements[i]
+            x = x + offset  # Parallax effect
+            img_scaled = pygame.transform.scale(img, (w, h))
+            screen.blit(img_scaled, (x, y))
 
 def bg_parallax_forest(screen, cam_x):
     if bg_image2:
@@ -171,7 +195,7 @@ def create_obstacles_lvl3():
 
 def spawn_enemy():
     x = WIDTH*(SCREENS_PER_LEVEL-1) + WIDTH//2 - ENEMY_WIDTH//2
-    y = GROUND_Y - ENEMY_HEIGHT
+    y = GROUND_Y - ENEMY_HEIGHT + 10
     return pygame.Rect(x, y, ENEMY_WIDTH, ENEMY_HEIGHT)
 
 def spawn_big_boss():
