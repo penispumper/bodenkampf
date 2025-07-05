@@ -136,10 +136,11 @@ bg_apartment_placements = [
     (80, 340, 80, 80),
     (190, 300, 120, 120),
     (350, 350, 40, 70),
-    (420, 250, 70, 70),
+    (420, 280, 70, 70),
     (550, 360, 60, 60),
-    (650, 350, 50, 70),
-    (800, 360, 60, 60)
+    (650, 260, 130, 130),
+    (750, 350, 50, 70),
+    (840, 360, 60, 60)
 ]
 
 def bg_apartment(screen, cam_x, bg_offset=0):
@@ -165,17 +166,32 @@ def bg_park(screen, cam_x):
         pygame.draw.rect(screen, (110, 70, 20), (x+80, GROUND_Y - 70, 10, 60))
         pygame.draw.ellipse(screen, (34,139,34), (x+60, GROUND_Y - 100, 50, 50))
 
-# --- Obstacle factories ---
+def load_obstacle_image(level, obstype):
+    folder = f"sprites/obstacles/level{level}/{obstype}"
+    # Try common names first (you can extend this logic)
+    for img_name in [f"{obstype}1.png", f"{obstype}.png", "1.png"]:
+        img_path = os.path.join(folder, img_name)
+        if os.path.exists(img_path):
+            try:
+                return pygame.image.load(img_path).convert_alpha()
+            except Exception:
+                pass
+    return None  # fallback will be used in drawing
+
 def create_obstacles_lvl1():
     obs = []
-    obs.append({'rect': pygame.Rect(150, GROUND_Y - 30, 50, 30), 'type': 'spike'})
-    obs.append({'rect': pygame.Rect(350, GROUND_Y-20, 40, 20),  'type': 'spring'})
-    obs.append({'rect': pygame.Rect(550, GROUND_Y-120, 80, 20),'type': 'platform'})
-    obs.append({'rect': pygame.Rect(480, GROUND_Y-5, 200, 10),  'type': 'water'})
+    def add_obstacle(x, y, w, h, typ):
+        img = load_obstacle_image(1, typ)
+        obs.append({'rect': pygame.Rect(x, y, w, h), 'type': typ, 'img': img})
+
+    add_obstacle(150, GROUND_Y - 30, 50, 30, 'spike')
+    add_obstacle(350, GROUND_Y-20, 50, 50, 'spring')
+    add_obstacle(550, GROUND_Y-120, 80, 20, 'platform')
+    add_obstacle(480, GROUND_Y-5, 200, 10, 'water')
     off = WIDTH
-    obs.append({'rect': pygame.Rect(off+150, GROUND_Y-20, 40, 20),  'type': 'spring'})
-    obs.append({'rect': pygame.Rect(off+200, GROUND_Y-10, 120, 10), 'type': 'spike'})
-    obs.append({'rect': pygame.Rect(off+600, GROUND_Y-60, 60, 60),  'type': 'rotating'})
+    add_obstacle(off+150, GROUND_Y-20, 40, 20, 'spring')
+    add_obstacle(off+200, GROUND_Y-10, 120, 10, 'spike')
+    add_obstacle(off+600, GROUND_Y-60, 60, 60, 'rotating')
     return obs
 
 def create_obstacles_lvl2():
@@ -414,24 +430,16 @@ while running:
     # Ground
     pygame.draw.rect(screen, GROUND_COLOR, (0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y))
 
-    # Obstacles
+    # --- Draw Obstacles ---
     for o in obstacles:
         r = o['rect']
+        img = o.get('img')
         typ = o['type']
-        img = OBSTACLE_IMAGES.get(typ)
-        if typ == 'spring':
-            if current_level_idx == 2:
-                color = (200, 120, 255)
-            elif current_level_idx == 0:
-                color = (220, 50, 50)
-            else:
-                color = OBSTACLE_TYPES[typ]["color"]
-        else:
-            color = OBSTACLE_TYPES[typ]["color"]
         if img:
             img_scaled = pygame.transform.scale(img, (r.width, r.height))
             screen.blit(img_scaled, (r.x - cam_x, r.y))
         else:
+            color = OBSTACLE_TYPES.get(typ, {}).get("color", (180, 180, 180))
             pygame.draw.rect(screen, color, (r.x - cam_x, r.y, r.width, r.height))
 
     # --- Fight Animation ---
